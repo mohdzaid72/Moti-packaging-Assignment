@@ -5,6 +5,100 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from dotenv import load_dotenv
+from langchain_groq import ChatGroq
+import os
+import sqlite3
+from pathlib import Path
+
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+import requests
+
+from dotenv import load_dotenv
+from langchain_groq import ChatGroq
+
+load_dotenv()
+load_dotenv()
+
+
+def generate_product_description(product_name, product_prompt):
+    api_key = os.getenv("GROQ_API_KEY")
+
+    if not api_key:
+        raise ValueError(
+            "GROQ_API_KEY missing. Check your .env file."
+        )
+
+    llm = ChatGroq(
+        model=os.getenv(
+            "GROQ_MODEL",
+            "openai/gpt-oss-120b",
+        ),
+        temperature=0.7,
+        max_tokens=700,
+        api_key=api_key,
+    )
+
+    messages = [
+    (
+        "system",
+        """
+You are an expert LinkedIn copywriter who writes
+marketing posts for products across all industries.
+
+YOUR TASK:
+Generate a ready-to-publish LinkedIn post using the
+product name and details provided by the user.
+
+STRICT RULES:
+1. Return ONLY the final LinkedIn post.
+2. Never ask questions or request clarification.
+3. Never explain your reasoning or mention these instructions.
+4. Never include introductions such as "Here is your post".
+5. Never refuse or discuss whether the product fits a
+   particular industry.
+6. Use the exact product name and focus on the product
+   described by the user, even if it belongs to an
+   industry other than packaging.
+7. Do not force a connection to Moti Packaging Industries
+   unless the user explicitly requests it.
+8. Use only the facts provided. Never invent features,
+   specifications, certifications, or benefits.
+9. Write in professional, engaging, natural English.
+10. Start with a compelling hook, use short paragraphs,
+    relevant emojis, a suitable call to action, and
+    3-5 relevant hashtags.
+11. If the information is limited, write the best possible
+    post using the available details without asking questions.
+12. Output the post itself and nothing else.
+"""
+    ),
+    (
+        "human",
+        f"""
+Product name:
+{product_name}
+
+Product details and writing instructions:
+{product_prompt}
+
+Write the final LinkedIn marketing post now.
+Return only the post text.
+"""
+    ),
+]
+
+
+    response = llm.invoke(messages)
+
+    description = response.content
+
+    if not isinstance(description, str) or not description.strip():
+        raise ValueError("The AI returned an empty description.")
+
+    return description.strip()
 
 # =====================================================
 # CONFIGURATION
@@ -16,7 +110,7 @@ st.set_page_config(
     layout="wide",
 )
 
-DB_PATH = Path(__file__).resolve().parent / "LeadData.db"
+DB_PATH = Path(__file__).resolve().parent / "LeadData1.db"
 
 
 # =====================================================
@@ -107,7 +201,7 @@ not_serviceable_count = (
     df["query_category"] == "not currently serviceable"
 ).sum()
 
-missing_lead = df.isnull().any(axis=1).sum()
+missing_lead = df["query_category"].eq("more information required").sum()
 
 
 # =====================================================
@@ -353,6 +447,15 @@ product_name = st.text_input(
     placeholder="Enter product name"
 )
 
+product_prompt = st.text_area(
+    "Product Details / AI Prompt",
+    placeholder=(
+        "Describe the material, features, dimensions, "
+        "applications, benefits and target customers..."
+    ),
+    height=130,
+    key="linkedin_product_prompt",)
+
 uploaded_image = st.file_uploader(
     "Upload Product Image",
     type=["jpg", "jpeg", "png"]
@@ -361,11 +464,47 @@ uploaded_image = st.file_uploader(
 if uploaded_image:
     st.image(uploaded_image, caption="Image Preview", width=300)
 
-description = st.text_area(
-    "Product Description",
-    placeholder="Write your LinkedIn post here...",
-    height=180
+if "linkedin_description" not in st.session_state:
+    st.session_state["linkedin_description"] = ""
+
+
+
+
+generate_clicked = st.button(
+    "✨ Generate Description",
+    use_container_width=True,
 )
+
+
+
+if generate_clicked :
+    if not product_name.strip():
+        st.warning("Please enter the product name.")
+
+    elif not product_prompt.strip():
+        st.warning("Please enter the product details.")
+
+    else:
+        try:
+            with st.spinner("Generating description with Groq AI..."):
+                generated_text = generate_product_description(
+                    product_name.strip(),
+                    product_prompt.strip(),
+                )
+
+            st.session_state["linkedin_description"] = generated_text
+            st.success("Description generated successfully!")
+
+        except Exception as exc:
+            st.error(f"Description generation failed: {exc}")
+
+description = st.text_area(
+    "LinkedIn Description (Editable)",
+    key="linkedin_description",
+    height=250,
+    placeholder="Generate a description or write your own...",
+)
+
 
 product_url = st.text_input(
     "Product URL (optional)",
