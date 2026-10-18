@@ -110,7 +110,7 @@ st.set_page_config(
     layout="wide",
 )
 
-DB_PATH = Path(__file__).resolve().parent / "LeadData1.db"
+DB_PATH = Path(__file__).resolve().parent / "LeadData2.db"
 
 
 # =====================================================
